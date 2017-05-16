@@ -51,6 +51,7 @@ class Test(unittest.TestCase):
     def test_sz_margin_details(self):
         self.set_data()
         print(fd.sz_margin_details(self.end))   
+        
     
 if __name__ == "__main__":
     unittest.main()

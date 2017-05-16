@@ -17,28 +17,38 @@ from pandas.util.testing import _network_error_classes
 import time
 import tushare.stock.fundamental as fd
 from tushare.util.netbase import Client
+
 try:
     from urllib.request import urlopen, Request
 except ImportError:
     from urllib2 import urlopen, Request
 
 
-def get_industry_classified():
+def get_industry_classified(standard='sina'):
     """
         获取行业分类数据
-    Return
-    --------
+    Parameters
+    ----------
+    standard
+    sina:新浪行业 sw：申万 行业
+    
+    Returns
+    -------
     DataFrame
         code :股票代码
         name :股票名称
         c_name :行业名称
     """
-    df = _get_type_data(ct.SINA_INDUSTRY_INDEX_URL%(ct.P_TYPE['http'],
+    if standard == 'sw':
+        df = _get_type_data(ct.SINA_INDUSTRY_INDEX_URL%(ct.P_TYPE['http'],
+                                                    ct.DOMAINS['vsf'], ct.PAGES['ids_sw']))
+    else:
+        df = _get_type_data(ct.SINA_INDUSTRY_INDEX_URL%(ct.P_TYPE['http'],
                                                     ct.DOMAINS['vsf'], ct.PAGES['ids']))
     data = []
     ct._write_head()
     for row in df.values:
-        rowDf =  _get_detail(row[0])
+        rowDf =  _get_detail(row[0], retry_count=10, pause=0.01)
         rowDf['c_name'] = row[1]
         data.append(rowDf)
     data = pd.concat(data, ignore_index=True)
@@ -67,7 +77,7 @@ def get_concept_classified():
     return data
 
 
-def get_area_classified(file_path=None):
+def get_area_classified():
     """
         获取地域分类数据
     Return
@@ -77,14 +87,14 @@ def get_area_classified(file_path=None):
         name :股票名称
         area :地域名称
     """
-    df = fd.get_stock_basics(file_path)
+    df = fd.get_stock_basics()
     df = df[['name', 'area']]
     df.reset_index(level=0, inplace=True)
     df = df.sort('area').reset_index(drop=True)
     return df
 
 
-def get_gem_classified(file_path=None):
+def get_gem_classified():
     """
         获取创业板股票
     Return
@@ -93,7 +103,7 @@ def get_gem_classified(file_path=None):
         code :股票代码
         name :股票名称
     """
-    df = fd.get_stock_basics(file_path)
+    df = fd.get_stock_basics()
     df.reset_index(level=0, inplace=True)
     df = df[ct.FOR_CLASSIFY_B_COLS]
     df = df.ix[df.code.str[0] == '3']
@@ -101,7 +111,7 @@ def get_gem_classified(file_path=None):
     return df
     
 
-def get_sme_classified(file_path=None):
+def get_sme_classified():
     """
         获取中小板股票
     Return
@@ -110,14 +120,14 @@ def get_sme_classified(file_path=None):
         code :股票代码
         name :股票名称
     """
-    df = fd.get_stock_basics(file_path)
+    df = fd.get_stock_basics()
     df.reset_index(level=0, inplace=True)
     df = df[ct.FOR_CLASSIFY_B_COLS]
     df = df.ix[df.code.str[0:3] == '002']
     df = df.sort('code').reset_index(drop=True)
     return df 
 
-def get_st_classified(file_path=None):
+def get_st_classified():
     """
         获取风险警示板股票
     Return
@@ -126,7 +136,7 @@ def get_st_classified(file_path=None):
         code :股票代码
         name :股票名称
     """
-    df = fd.get_stock_basics(file_path)
+    df = fd.get_stock_basics()
     df.reset_index(level=0, inplace=True)
     df = df[ct.FOR_CLASSIFY_B_COLS]
     df = df.ix[df.name.str.contains('ST')]
@@ -156,7 +166,7 @@ def _get_detail(tag, retry_count=3, pause=0.001):
             df = pd.DataFrame(pd.read_json(js, dtype={'code':object}), columns=ct.THE_FIELDS)
             df = df[ct.FOR_CLASSIFY_B_COLS]
             return df
-        raise IOError(ct.NETWORK_URL_ERROR_MSG)
+        #raise IOError(ct.NETWORK_URL_ERROR_MSG)
     
 
 def _get_type_data(url):
@@ -184,15 +194,14 @@ def get_hs300s():
         date :日期
         weight:权重
     """
+    from tushare.stock.fundamental import get_stock_basics
     try:
-        df = pd.read_excel(ct.HS300_CLASSIFY_URL%(ct.P_TYPE['http'], ct.DOMAINS['idx'], 
-                                                  ct.INDEX_C_COMM, ct.PAGES['hs300b']), parse_cols=[0,1])
-        df.columns = ct.FOR_CLASSIFY_B_COLS
-        df['code'] = df['code'].map(lambda x :str(x).zfill(6))
-        wt = pd.read_excel(ct.HS300_CLASSIFY_URL%(ct.P_TYPE['http'], ct.DOMAINS['idx'], 
-                                                  ct.INDEX_C_COMM, ct.PAGES['hs300w']), parse_cols=[0,3,6])
+        wt = pd.read_excel(ct.HS300_CLASSIFY_URL_FTP%(ct.P_TYPE['ftp'], ct.DOMAINS['idxip'], 
+                                                  ct.PAGES['hs300w']), parse_cols=[0, 3, 6])
         wt.columns = ct.FOR_CLASSIFY_W_COLS
         wt['code'] = wt['code'].map(lambda x :str(x).zfill(6))
+        df = get_stock_basics()[['name']]
+        df = df.reset_index()
         return pd.merge(df,wt)
     except Exception as er:
         print(str(er))
@@ -208,8 +217,8 @@ def get_sz50s():
         name :股票名称
     """
     try:
-        df = pd.read_excel(ct.HS300_CLASSIFY_URL%(ct.P_TYPE['http'], ct.DOMAINS['idx'], 
-                                                  ct.INDEX_C_COMM, ct.PAGES['sz50b']), parse_cols=[0,1])
+        df = pd.read_excel(ct.HS300_CLASSIFY_URL_FTP%(ct.P_TYPE['ftp'], ct.DOMAINS['idxip'], 
+                                                  ct.PAGES['sz50b']), parse_cols=[0,1])
         df.columns = ct.FOR_CLASSIFY_B_COLS
         df['code'] = df['code'].map(lambda x :str(x).zfill(6))
         return df
@@ -226,12 +235,19 @@ def get_zz500s():
         code :股票代码
         name :股票名称
     """
+    from tushare.stock.fundamental import get_stock_basics
     try:
-        df = pd.read_excel(ct.HS300_CLASSIFY_URL%(ct.P_TYPE['http'], ct.DOMAINS['idx'], 
-                                                  ct.INDEX_C_COMM, ct.PAGES['zz500b']), parse_cols=[0,1])
-        df.columns = ct.FOR_CLASSIFY_B_COLS
-        df['code'] = df['code'].map(lambda x :str(x).zfill(6))
-        return df
+#         df = pd.read_excel(ct.HS300_CLASSIFY_URL_FTP%(ct.P_TYPE['ftp'], ct.DOMAINS['idxip'], 
+#                                                   ct.PAGES['zz500b']), parse_cols=[0,1])
+#         df.columns = ct.FOR_CLASSIFY_B_COLS
+#         df['code'] = df['code'].map(lambda x :str(x).zfill(6))
+        wt = pd.read_excel(ct.HS300_CLASSIFY_URL_FTP%(ct.P_TYPE['ftp'], ct.DOMAINS['idxip'], 
+                                                   ct.PAGES['zz500wt']), parse_cols=[0, 3, 6])
+        wt.columns = ct.FOR_CLASSIFY_W_COLS
+        wt['code'] = wt['code'].map(lambda x :str(x).zfill(6))
+        df = get_stock_basics()[['name']]
+        df = df.reset_index()
+        return pd.merge(df,wt)
     except Exception as er:
         print(str(er)) 
 
@@ -290,7 +306,7 @@ def get_suspended():
         return df
     except Exception as er:
         print(str(er))   
-
+            
 
 def _random(n=13):
     from random import randint
